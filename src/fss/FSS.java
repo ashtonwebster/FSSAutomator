@@ -8,6 +8,7 @@ import java.io.FileWriter;
 import java.io.ObjectInputStream.GetField;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.BitSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Random;
@@ -15,15 +16,31 @@ import java.util.Random;
 import weka.attributeSelection.ASEvaluation;
 import weka.attributeSelection.ASSearch;
 import weka.attributeSelection.CfsSubsetEval;
+import weka.attributeSelection.ChiSquaredAttributeEval;
+import weka.attributeSelection.ClassifierSubsetEval;
+import weka.attributeSelection.ConsistencySubsetEval;
+import weka.attributeSelection.CostSensitiveAttributeEval;
+import weka.attributeSelection.CostSensitiveSubsetEval;
+import weka.attributeSelection.GainRatioAttributeEval;
 import weka.attributeSelection.GreedyStepwise;
+import weka.attributeSelection.HoldOutSubsetEvaluator;
 import weka.attributeSelection.InfoGainAttributeEval;
+import weka.attributeSelection.RaceSearch;
 import weka.attributeSelection.Ranker;
+import weka.attributeSelection.SVMAttributeEval;
+import weka.attributeSelection.SymmetricalUncertAttributeEval;
+import weka.attributeSelection.UnsupervisedAttributeEvaluator;
 import weka.classifiers.Classifier;
 import weka.classifiers.Evaluation;
+import weka.classifiers.bayes.WAODE;
+import weka.classifiers.functions.SMO;
 import weka.classifiers.meta.AttributeSelectedClassifier;
+import weka.classifiers.rules.DecisionTable;
+import weka.classifiers.rules.Prism;
 import weka.classifiers.trees.J48;
 import weka.classifiers.trees.RandomForest;
 import weka.classifiers.trees.m5.CorrelationSplitInfo;
+import weka.core.Instance;
 import weka.core.Instances;
 import weka.filters.Filter;
 import weka.filters.supervised.attribute.Discretize;
@@ -45,7 +62,7 @@ public class FSS {
       result = new Instances(reader);
       result.setClassIndex(result.numAttributes() - 1);
       reader.close();
-
+      RaceSearch search = new RaceSearch(); 
       return result;
    }
 
@@ -71,7 +88,11 @@ public class FSS {
    private static List<Classifier> getClassifierList() {
       Classifier[] classifierList = {
             new RandomForest(),
-            new J48()
+            new Prism(),
+            new SMO(),
+//            new WAODE(),
+            new DecisionTable()
+
       };
       return Arrays.asList(classifierList);
    }
@@ -84,34 +105,60 @@ public class FSS {
    private static List<FSS_Strategy> getFSSStrategyList(Instances inputTrain) throws Exception {
 
       List<FSS_Strategy> strategyList = new ArrayList<FSS_Strategy>();
-      
+
       //add regular old classifier with no selection or search
-      strategyList.add(new FSS_Strategy(null, null));
+//      strategyList.add(new FSS_Strategy(null, null));
 
-      //adding in different numbers of selection using info gain
-      for (int i = 5; i < 35; i+=5) {
+      //ADDING RANKERS
+      ASEvaluation[] attributeList = {
+            new ChiSquaredAttributeEval(),
+            new GainRatioAttributeEval(),
+            new InfoGainAttributeEval(),
+            new SymmetricalUncertAttributeEval(),
+      };
+      for (ASEvaluation eval : attributeList) {
+         for (int i = 5; i < 35; i+=5) {
 
-      Ranker ranker = new Ranker();
-         ranker.setGenerateRanking(true);
-         ranker.setThreshold(9999999.0);
-         ranker.setNumToSelect(i);
-         ASEvaluation evaluator = new InfoGainAttributeEval();
-         evaluator.buildEvaluator(inputTrain);
-         String attrUsed = arrToString(ranker.search(evaluator, inputTrain), i);
-         FSS_Strategy newStrategy = new FSS_Strategy(evaluator, 
-               ranker,
+            Ranker ranker = new Ranker();
+            ranker.setGenerateRanking(true);
+            ranker.setThreshold(9999999.0);
+            ranker.setNumToSelect(i);
+            eval.buildEvaluator(inputTrain);
+            String attrUsed = arrToString(ranker.search(eval, inputTrain), i);
+            FSS_Strategy newStrategy = new FSS_Strategy(eval, 
+                  ranker,
+                  null,
+                  "select_" + i,
+                  attrUsed
+                  );
+            strategyList.add(newStrategy);
+         }
+      }
+      
+      //ADD SUBSET EVALS
+      ASEvaluation[] subsetList = {
+            new CfsSubsetEval(),
+            new ConsistencySubsetEval(),
+            };
+      for (ASEvaluation subsetEval : subsetList) {
+         GreedyStepwise greedySearch = new GreedyStepwise();
+         subsetEval.buildEvaluator(inputTrain);
+         int[] usedIndices = greedySearch.search(subsetEval, inputTrain);
+         String attrUsed = arrToString(usedIndices, usedIndices.length);
+         FSS_Strategy newStrategy = new FSS_Strategy(
+               subsetEval,
+               greedySearch,
                null,
-               "select_" + i,
-               attrUsed
-               );
+               null,
+               attrUsed);
          strategyList.add(newStrategy);
       }
+      
       return strategyList;
    }
 
 
    public static void printResults(Evaluation evaluation, FSS_Strategy strategy, Classifier classifier) {
-      
       System.out.printf("%s,%s,%s,%s,%s,%s,%f,%f,%f,%f\n",
             strategy.getEvaluationName(),
             strategy.getEvaluationDescription(),
@@ -125,7 +172,7 @@ public class FSS {
             evaluation.confusionMatrix()[1][1]
             );
    }
-   
+
    public static String allIndicesString(int numAttr) {
       String s = "";
       for (int i = 0; i < numAttr; i++) {
@@ -136,7 +183,7 @@ public class FSS {
       }
       return s;
    }
-   
+
    public static String arrToString(int[] arr, int numAttrUsed) {
       String s = "";
       for (int i = 0; i < numAttrUsed; i++) {
@@ -147,23 +194,24 @@ public class FSS {
       }
       return s;
    }
-   
-   
+
+
    public static void main(String[] args) throws Exception {     
       Instances     inputTrain;
       Instances     inputTest;
       // load data (class attribute is assumed to be last attribute)
       inputTrain = load(args[0]);
       inputTest  = load(args[1]);
-      
-//uncomment for discretization
+
+      //uncomment for discretization
       //      Discretize filter = new Discretize();
-//      filter.setInputFormat(inputTrain);
-  
+      //      filter.setInputFormat(inputTrain);
+
       AttributeSelectedClassifier classifier = new AttributeSelectedClassifier();
       List<FSS_Strategy> strategyList = getFSSStrategyList(inputTrain);
       List<Classifier> classifierList = getClassifierList();
-      System.out.println("evaluator,evaluatorOptions,search,searchOptions,true_positives,false_negatives,false_positives,true_negatives");
+      System.out.println("evaluator,evaluatorOptions,search,searchOptions,"
+            + "indices_used,classifier_name,true_positives,false_negatives,false_positives,true_negatives");
 
       for (FSS_Strategy strategy : strategyList) {
          if (strategy.getSearch() != null && strategy.getEvaluation() != null) {
@@ -171,24 +219,26 @@ public class FSS {
             classifier.setEvaluator(strategy.getEvaluation());
          }
          for (Classifier baseClassifier : classifierList) {
-            String indicesUsed;
             Evaluation evaluation = new Evaluation(inputTrain);
             //evaluate
             if (classifier.getSearch() != null && classifier.getEvaluator() != null) {
                classifier.setClassifier(baseClassifier);
                classifier.buildClassifier(inputTrain);
                evaluation.evaluateModel(classifier, inputTest);
+               printResults(evaluation, strategy, baseClassifier);
+
             } else {
                //use regular classifier
                baseClassifier.buildClassifier(inputTrain);
                evaluation.evaluateModel(baseClassifier, inputTest);
-            }
-            
-            //print results
-//            System.out.println(evaluation.toSummaryString());
-//            System.out.println(evaluation.toMatrixString());
+               printResults(evaluation, strategy, baseClassifier);
 
-            printResults(evaluation, strategy, classifier);
+            }
+
+            //print results
+            //            System.out.println(evaluation.toSummaryString());
+            //            System.out.println(evaluation.toMatrixString());
+
          }
       }
    }
