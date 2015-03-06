@@ -32,6 +32,7 @@ import weka.attributeSelection.SymmetricalUncertAttributeEval;
 import weka.attributeSelection.UnsupervisedAttributeEvaluator;
 import weka.classifiers.Classifier;
 import weka.classifiers.Evaluation;
+import weka.classifiers.bayes.AODE;
 import weka.classifiers.bayes.WAODE;
 import weka.classifiers.functions.SMO;
 import weka.classifiers.meta.AttributeSelectedClassifier;
@@ -90,7 +91,7 @@ public class FSS {
             new RandomForest(),
             new Prism(),
             new SMO(),
-//            new WAODE(),
+            new AODE(),
             new DecisionTable()
 
       };
@@ -213,6 +214,13 @@ public class FSS {
       System.out.println("evaluator,evaluatorOptions,search,searchOptions,"
             + "indices_used,classifier_name,true_positives,false_negatives,false_positives,true_negatives");
 
+      for (Classifier baseClassifier: classifierList) {
+         Evaluation evaluation = new Evaluation(inputTrain);
+         baseClassifier.buildClassifier(inputTrain);
+         evaluation.evaluateModel(baseClassifier, inputTest);
+         printResults(evaluation, new FSS_Strategy(null, null), baseClassifier);
+      }
+      
       for (FSS_Strategy strategy : strategyList) {
          if (strategy.getSearch() != null && strategy.getEvaluation() != null) {
             classifier.setSearch(strategy.getSearch());
@@ -221,19 +229,12 @@ public class FSS {
          for (Classifier baseClassifier : classifierList) {
             Evaluation evaluation = new Evaluation(inputTrain);
             //evaluate
-            if (classifier.getSearch() != null && classifier.getEvaluator() != null) {
                classifier.setClassifier(baseClassifier);
                classifier.buildClassifier(inputTrain);
                evaluation.evaluateModel(classifier, inputTest);
                printResults(evaluation, strategy, baseClassifier);
 
-            } else {
-               //use regular classifier
-               baseClassifier.buildClassifier(inputTrain);
-               evaluation.evaluateModel(baseClassifier, inputTest);
-               printResults(evaluation, strategy, baseClassifier);
 
-            }
 
             //print results
             //            System.out.println(evaluation.toSummaryString());
