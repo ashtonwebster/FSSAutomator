@@ -31,7 +31,7 @@
 					<includeProjectDependencies>true</includeProjectDependencies>
 					<includePluginDependencies>false</includePluginDependencies>
 					<classpathScope>compile</classpathScope>
-					<mainClass>${main.class}</mainClass>
+					<mainClass>fss.FSS</mainClass>
 				</configuration>
 			</plugin>
 		</plugins>

@@ -3,6 +3,8 @@ package fss;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.ObjectInputStream.GetField;
@@ -12,6 +14,10 @@ import java.util.BitSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Random;
+import java.util.Scanner;
+
+import javax.annotation.Generated;
+import javax.management.RuntimeErrorException;
 
 import weka.attributeSelection.ASEvaluation;
 import weka.attributeSelection.ASSearch;
@@ -45,8 +51,47 @@ import weka.core.Instance;
 import weka.core.Instances;
 import weka.filters.Filter;
 import weka.filters.supervised.attribute.Discretize;
+import weka.filters.unsupervised.attribute.Remove;
 
 public class FSS {
+   private static final String UNIQUE_FS_FILENAME = "uniq_fs.txt";
+
+   private static List<List<Integer>> readUniqueFeatures() {
+      List<List<Integer>> outerList = new ArrayList<List<Integer>>();
+      try {
+         Scanner scanner = new Scanner(new File(UNIQUE_FS_FILENAME));
+
+         while (scanner.hasNextLine()) {
+            String[] stringIndexList = scanner.nextLine().split("-");
+            List<Integer> innerIndexList = new ArrayList<Integer>();
+            for (int i = 0; i < stringIndexList.length; i++) {   
+               if (stringIndexList[i].equals("null")) {
+                  //add all indices for null
+                  for (int j = 0; j < 33; j++) {
+                     innerIndexList.add(j);
+                  }
+               } else {
+                  innerIndexList.add(Integer.parseInt(stringIndexList[i]));
+               }
+            }
+            innerIndexList.add(34);
+            outerList.add(innerIndexList);
+         }
+      } catch (FileNotFoundException e) {
+         // TODO Auto-generated catch block
+         e.printStackTrace();
+      }
+      return outerList;
+   }
+
+   private static void printNestedList(List<List<Integer>> uniqueFeatures) {
+      for (List<Integer> innerList : uniqueFeatures) {
+         for (Integer i : innerList) {
+            System.out.print(i + " ");
+         }
+         System.out.println();
+      }
+   }
 
    /**
     * loads the given ARFF file and sets the class attribute as the last
@@ -104,11 +149,10 @@ public class FSS {
     * @throws Exception 
     */
    private static List<FSS_Strategy> getFSSStrategyList(Instances inputTrain) throws Exception {
-
       List<FSS_Strategy> strategyList = new ArrayList<FSS_Strategy>();
 
       //add regular old classifier with no selection or search
-//      strategyList.add(new FSS_Strategy(null, null));
+      //      strategyList.add(new FSS_Strategy(null, null));
 
       //ADDING RANKERS
       ASEvaluation[] attributeList = {
@@ -135,12 +179,12 @@ public class FSS {
             strategyList.add(newStrategy);
          }
       }
-      
+
       //ADD SUBSET EVALS
       ASEvaluation[] subsetList = {
             new CfsSubsetEval(),
             new ConsistencySubsetEval(),
-            };
+      };
       for (ASEvaluation subsetEval : subsetList) {
          GreedyStepwise greedySearch = new GreedyStepwise();
          subsetEval.buildEvaluator(inputTrain);
@@ -154,18 +198,14 @@ public class FSS {
                attrUsed);
          strategyList.add(newStrategy);
       }
-      
+
       return strategyList;
    }
 
 
-   public static void printResults(Evaluation evaluation, FSS_Strategy strategy, Classifier classifier) {
-      System.out.printf("%s,%s,%s,%s,%s,%s,%f,%f,%f,%f\n",
-            strategy.getEvaluationName(),
-            strategy.getEvaluationDescription(),
-            strategy.getSearchName(),
-            strategy.getSearchDescription(),
-            strategy.getAttrUsed(),
+   public static void printResults(Evaluation evaluation, FSS_Strategy strategy, Classifier classifier, String featureSetString) {
+      System.out.printf("%s,%s,%f,%f,%f,%f\n",
+            featureSetString,
             classifier.getClass().toString(),
             evaluation.confusionMatrix()[0][0],
             evaluation.confusionMatrix()[0][1],
@@ -196,51 +236,72 @@ public class FSS {
       return s;
    }
 
+   public static String arrToString(List<Integer> arr, int numAttrUsed) {
+      String s = "";
+      for (int i = 0; i < numAttrUsed; i++) {
+         s += arr.get(i);
+         if (i != numAttrUsed - 1) {
+            s += "-";
+         }
+      }
+      return s;
+   }
 
-   public static void main(String[] args) throws Exception {     
+   private static Instances getModifiedInstance(Instances originalInstances, List<Integer> featureSet) throws Exception {
+      Remove removeFilter = new Remove();
+      removeFilter.setInputFormat(originalInstances);
+      int[] array = new int[featureSet.size()];
+      for (int i = 0; i < array.length; i++) {
+         array[i] = featureSet.get(i);
+      }
+      removeFilter.setAttributeIndicesArray(array);
+      //System.out.println(removeFilter.getAttributeIndices());
+      String[] s = {"-R", removeFilter.getAttributeIndices(), "-V"};
+      removeFilter.setOptions(s);
+
+      //   removeFilter.setInvertSelection(true);
+      try {
+         Instances newInstances = Filter.useFilter(originalInstances, removeFilter);
+         return newInstances;
+      } catch (Exception e) {
+         // TODO Auto-generated catch block
+         e.printStackTrace();
+      }
+      return null;
+   }
+
+   public static void main(String[] args) throws Exception {
+      List<List<Integer>> featureSetList = readUniqueFeatures();
+      printNestedList(featureSetList);
+
       Instances     inputTrain;
       Instances     inputTest;
       // load data (class attribute is assumed to be last attribute)
-      inputTrain = load(args[0]);
-      inputTest  = load(args[1]);
 
-      //uncomment for discretization
-      //      Discretize filter = new Discretize();
-      //      filter.setInputFormat(inputTrain);
+      for (int j = 0; j < 4; j++) {
+         
+         inputTrain = load(args[2 * j]);
+         inputTest = load(args[2 * j + 1]);
 
-      AttributeSelectedClassifier classifier = new AttributeSelectedClassifier();
-      List<FSS_Strategy> strategyList = getFSSStrategyList(inputTrain);
-      List<Classifier> classifierList = getClassifierList();
-      System.out.println("evaluator,evaluatorOptions,search,searchOptions,"
-            + "indices_used,classifier_name,true_positives,false_negatives,false_positives,true_negatives");
+         System.out.println("STARTING BOUND NUMBER " + j);
 
-      for (Classifier baseClassifier: classifierList) {
-         Evaluation evaluation = new Evaluation(inputTrain);
-         baseClassifier.buildClassifier(inputTrain);
-         evaluation.evaluateModel(baseClassifier, inputTest);
-         printResults(evaluation, new FSS_Strategy(null, null), baseClassifier);
-      }
-      
-      for (FSS_Strategy strategy : strategyList) {
-         if (strategy.getSearch() != null && strategy.getEvaluation() != null) {
-            classifier.setSearch(strategy.getSearch());
-            classifier.setEvaluator(strategy.getEvaluation());
-         }
-         for (Classifier baseClassifier : classifierList) {
-            Evaluation evaluation = new Evaluation(inputTrain);
-            //evaluate
-               classifier.setClassifier(baseClassifier);
-               classifier.buildClassifier(inputTrain);
-               evaluation.evaluateModel(classifier, inputTest);
-               printResults(evaluation, strategy, baseClassifier);
+         List<Classifier> classifierList = getClassifierList();
+         System.out.println("evaluator,evaluatorOptions,search,searchOptions,"
+               + "indices_used,classifier_name,true_positives,false_negatives,false_positives,true_negatives");
+         for (int i = 0; i < featureSetList.size(); i++) {
+            Instances modifiedInputTrain = getModifiedInstance(inputTrain, featureSetList.get(i));
+            Instances modifiedInputTest = getModifiedInstance(inputTest, featureSetList.get(i));
+            modifiedInputTrain.setClass(modifiedInputTrain.attribute(" label"));
+            modifiedInputTest.setClass(modifiedInputTrain.attribute(" label"));
 
-
-
-            //print results
-            //            System.out.println(evaluation.toSummaryString());
-            //            System.out.println(evaluation.toMatrixString());
-
+            for (Classifier baseClassifier: classifierList) {
+               Evaluation evaluation = new Evaluation(modifiedInputTrain);
+               baseClassifier.buildClassifier(modifiedInputTrain);
+               evaluation.evaluateModel(baseClassifier, modifiedInputTest);
+               printResults(evaluation, new FSS_Strategy(null, null), baseClassifier, arrToString(featureSetList.get(i), featureSetList.get(i).size()));
+            }
          }
       }
+
    }
 }
