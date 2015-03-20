@@ -108,7 +108,7 @@ public class FSS {
       List<FSS_Strategy> strategyList = new ArrayList<FSS_Strategy>();
 
       //add regular old classifier with no selection or search
-//      strategyList.add(new FSS_Strategy(null, null));
+      //      strategyList.add(new FSS_Strategy(null, null));
 
       //ADDING RANKERS
       ASEvaluation[] attributeList = {
@@ -135,12 +135,12 @@ public class FSS {
             strategyList.add(newStrategy);
          }
       }
-      
+
       //ADD SUBSET EVALS
       ASEvaluation[] subsetList = {
             new CfsSubsetEval(),
             new ConsistencySubsetEval(),
-            };
+      };
       for (ASEvaluation subsetEval : subsetList) {
          GreedyStepwise greedySearch = new GreedyStepwise();
          subsetEval.buildEvaluator(inputTrain);
@@ -154,13 +154,14 @@ public class FSS {
                attrUsed);
          strategyList.add(newStrategy);
       }
-      
+
       return strategyList;
    }
 
 
-   public static void printResults(Evaluation evaluation, FSS_Strategy strategy, Classifier classifier) {
-      System.out.printf("%s,%s,%s,%s,%s,%s,%f,%f,%f,%f\n",
+   public static void printResults(int lowerBound, Evaluation evaluation, FSS_Strategy strategy, Classifier classifier) {
+      System.out.printf("%d, %s,%s,%s,%s,%s,%s,%f,%f,%f,%f\n",
+            lowerBound,
             strategy.getEvaluationName(),
             strategy.getEvaluationDescription(),
             strategy.getSearchName(),
@@ -200,46 +201,42 @@ public class FSS {
    public static void main(String[] args) throws Exception {     
       Instances     inputTrain;
       Instances     inputTest;
+      int[] lowerBounds = {2, 4, 6, 8};
       // load data (class attribute is assumed to be last attribute)
-      inputTrain = load(args[0]);
-      inputTest  = load(args[1]);
+      for (int k = 0; k  < args.length / 2; k++) {
+         inputTrain = load(args[2 * k]);
+         inputTest  = load(args[2 * k + 1]);
 
-      //uncomment for discretization
-      //      Discretize filter = new Discretize();
-      //      filter.setInputFormat(inputTrain);
+         //uncomment for discretization
+         //      Discretize filter = new Discretize();
+         //      filter.setInputFormat(inputTrain);
 
-      AttributeSelectedClassifier classifier = new AttributeSelectedClassifier();
-      List<FSS_Strategy> strategyList = getFSSStrategyList(inputTrain);
-      List<Classifier> classifierList = getClassifierList();
-      System.out.println("evaluator,evaluatorOptions,search,searchOptions,"
-            + "indices_used,classifier_name,true_positives,false_negatives,false_positives,true_negatives");
+         AttributeSelectedClassifier classifier = new AttributeSelectedClassifier();
+         List<FSS_Strategy> strategyList = getFSSStrategyList(inputTrain);
+         List<Classifier> classifierList = getClassifierList();
+         System.out.println("evaluator,evaluatorOptions,search,searchOptions,"
+               + "indices_used,classifier_name,true_positives,false_negatives,false_positives,true_negatives");
 
-      for (Classifier baseClassifier: classifierList) {
-         Evaluation evaluation = new Evaluation(inputTrain);
-         baseClassifier.buildClassifier(inputTrain);
-         evaluation.evaluateModel(baseClassifier, inputTest);
-         printResults(evaluation, new FSS_Strategy(null, null), baseClassifier);
-      }
-      
-      for (FSS_Strategy strategy : strategyList) {
-         if (strategy.getSearch() != null && strategy.getEvaluation() != null) {
-            classifier.setSearch(strategy.getSearch());
-            classifier.setEvaluator(strategy.getEvaluation());
-         }
-         for (Classifier baseClassifier : classifierList) {
+         for (Classifier baseClassifier: classifierList) {
             Evaluation evaluation = new Evaluation(inputTrain);
-            //evaluate
+            baseClassifier.buildClassifier(inputTrain);
+            evaluation.evaluateModel(baseClassifier, inputTest);
+            printResults(lowerBounds[k], evaluation, new FSS_Strategy(null, null), baseClassifier);
+         }
+
+         for (FSS_Strategy strategy : strategyList) {
+            if (strategy.getSearch() != null && strategy.getEvaluation() != null) {
+               classifier.setSearch(strategy.getSearch());
+               classifier.setEvaluator(strategy.getEvaluation());
+            }
+            for (Classifier baseClassifier : classifierList) {
+               Evaluation evaluation = new Evaluation(inputTrain);
+               //evaluate
                classifier.setClassifier(baseClassifier);
                classifier.buildClassifier(inputTrain);
                evaluation.evaluateModel(classifier, inputTest);
-               printResults(evaluation, strategy, baseClassifier);
-
-
-
-            //print results
-            //            System.out.println(evaluation.toSummaryString());
-            //            System.out.println(evaluation.toMatrixString());
-
+               printResults(lowerBounds[k], evaluation, strategy, baseClassifier);
+            }
          }
       }
    }
