@@ -278,7 +278,7 @@ public class FSS {
       Instances     inputTest;
       // load data (class attribute is assumed to be last attribute)
 
-      for (int j = 0; j < 4; j++) {
+      for (int j = 0; j < args.length / 2; j++) {
          
          inputTrain = load(args[2 * j]);
          inputTest = load(args[2 * j + 1]);
