@@ -152,7 +152,7 @@ public class FSS {
       List<FSS_Strategy> strategyList = new ArrayList<FSS_Strategy>();
 
       //add regular old classifier with no selection or search
-      //      strategyList.add(new FSS_Strategy(null, null));
+      //strategyList.add(new FSS_Strategy(null, null));
 
       //ADDING RANKERS
       ASEvaluation[] attributeList = {
@@ -284,22 +284,10 @@ public class FSS {
          inputTest = load(args[2 * j + 1]);
 
          System.out.println("STARTING BOUND NUMBER " + j);
+         List<FSS_Strategy> strategyList = getFSSStrategyList(inputTrain);
 
-         List<Classifier> classifierList = getClassifierList();
-         System.out.println("evaluator,evaluatorOptions,search,searchOptions,"
-               + "indices_used,classifier_name,true_positives,false_negatives,false_positives,true_negatives");
-         for (int i = 0; i < featureSetList.size(); i++) {
-            Instances modifiedInputTrain = getModifiedInstance(inputTrain, featureSetList.get(i));
-            Instances modifiedInputTest = getModifiedInstance(inputTest, featureSetList.get(i));
-            modifiedInputTrain.setClass(modifiedInputTrain.attribute(" label"));
-            modifiedInputTest.setClass(modifiedInputTrain.attribute(" label"));
-
-            for (Classifier baseClassifier: classifierList) {
-               Evaluation evaluation = new Evaluation(modifiedInputTrain);
-               baseClassifier.buildClassifier(modifiedInputTrain);
-               evaluation.evaluateModel(baseClassifier, modifiedInputTest);
-               printResults(evaluation, new FSS_Strategy(null, null), baseClassifier, arrToString(featureSetList.get(i), featureSetList.get(i).size()));
-            }
+         for(FSS_Strategy strategy : strategyList) {
+            System.out.println(strategy.getAttrUsed());
          }
       }
 
