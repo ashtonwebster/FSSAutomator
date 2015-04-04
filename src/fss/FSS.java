@@ -8,6 +8,7 @@ import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.ObjectInputStream.GetField;
+import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
@@ -271,24 +272,20 @@ public class FSS {
    }
 
    public static void main(String[] args) throws Exception {
-      List<List<Integer>> featureSetList = readUniqueFeatures();
-      printNestedList(featureSetList);
-
       Instances     inputTrain;
-      Instances     inputTest;
-      // load data (class attribute is assumed to be last attribute)
 
-      for (int j = 0; j < args.length / 2; j++) {
-         
-         inputTrain = load(args[2 * j]);
-         inputTest = load(args[2 * j + 1]);
 
-         System.out.println("STARTING BOUND NUMBER " + j);
+
+      for (int j = 0; j < args.length; j++) {
+         System.out.println(args[j]);
+         inputTrain = load(args[j]);
+         PrintWriter writer = new PrintWriter(args[j].split("min")[0].split("sample_input/")[1] + "output.txt", "UTF-8");
+
          List<FSS_Strategy> strategyList = getFSSStrategyList(inputTrain);
-
          for(FSS_Strategy strategy : strategyList) {
-            System.out.println(strategy.getAttrUsed());
+            writer.println(strategy.getAttrUsed());
          }
+         writer.close();
       }
 
    }

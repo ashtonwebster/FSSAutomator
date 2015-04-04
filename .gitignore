@@ -1,3 +1,4 @@
 target/
 sample_input
 archive/
+*output.txt
