@@ -54,12 +54,12 @@ import weka.filters.supervised.attribute.Discretize;
 import weka.filters.unsupervised.attribute.Remove;
 
 public class FSS {
-   private static final String UNIQUE_FS_FILENAME = "uniq_fs.txt";
+   
 
-   private static List<List<Integer>> readUniqueFeatures() {
+   private static List<List<Integer>> readUniqueFeatures(String uniqFSName) {
       List<List<Integer>> outerList = new ArrayList<List<Integer>>();
       try {
-         Scanner scanner = new Scanner(new File(UNIQUE_FS_FILENAME));
+         Scanner scanner = new Scanner(new File(uniqFSName));
 
          while (scanner.hasNextLine()) {
             String[] stringIndexList = scanner.nextLine().split("-");
@@ -271,7 +271,7 @@ public class FSS {
    }
 
    public static void main(String[] args) throws Exception {
-      List<List<Integer>> featureSetList = readUniqueFeatures();
+      List<List<Integer>> featureSetList = readUniqueFeatures(args[0]);
       printNestedList(featureSetList);
 
       Instances     inputTrain;
@@ -280,10 +280,10 @@ public class FSS {
 
       for (int j = 0; j < args.length / 2; j++) {
          
-         inputTrain = load(args[2 * j]);
-         inputTest = load(args[2 * j + 1]);
+         inputTrain = load(args[2 * j + 1]);
+         inputTest = load(args[2 * j + 2]);
 
-         System.out.println("STARTING BOUND NUMBER " + j);
+         System.out.println("STARTING Test " + args[2*j+1] + " train: " + args[2 * j + 2] + " fs " + args[0]);
 
          List<Classifier> classifierList = getClassifierList();
          System.out.println("evaluator,evaluatorOptions,search,searchOptions,"
